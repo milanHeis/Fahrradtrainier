@@ -455,7 +455,7 @@ const TT={
 const DN=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const BC={b1:'#5c8eff',b2:'#34d058'};
-const APP_VERSION='1.3.0';
+const APP_VERSION='1.3.1';
 
 let S={plan:{0:'rest',1:'rest',2:'z2',3:'z2',4:'intervals_z3z4',5:'intervals_z4',6:'rest'},
   bikes:{b1:'Tracking-Bike',b2:'Gravelbike'},hrMin:80,hrMax:195,sessions:[],deleted:[],updatedAt:'',
@@ -961,12 +961,13 @@ function drawElevChart(s,chartId){
 
 // ===== TRAINING LOAD =====
 function calcTSS(s){if(!s.durationSec||!s.heartRate||!S.hrMax)return null;const if_=(s.heartRate/S.hrMax);return Math.round(s.durationSec/3600*if_*if_*100);}
-function getLoadPts(days=60){
-  const sorted=[...S.sessions].sort((a,b)=>a.date.localeCompare(b.date));
-  const byDate={};sorted.forEach(s=>{const t=calcTSS(s);if(t)byDate[s.date]=(byDate[s.date]||0)+t;});
+function getLoadPts(displayDays=60){
+  const WARMUP=200; // EMA-Warmup: CTL braucht ~5×42=210 Tage für 99% Genauigkeit
+  const totalDays=displayDays+WARMUP;
+  const byDate={};S.sessions.forEach(s=>{const t=calcTSS(s);if(t)byDate[s.date]=(byDate[s.date]||0)+t;});
   const now2=new Date();let curCTL=0,curATL=0;const ctlK=1-Math.exp(-1/42),atlK=1-Math.exp(-1/7);
-  const pts=[];for(let i=days-1;i>=0;i--){const d=new Date(now2);d.setDate(d.getDate()-i);const ds=d.toISOString().slice(0,10);const t=byDate[ds]||0;curCTL=curCTL*(1-ctlK)+t*ctlK;curATL=curATL*(1-atlK)+t*atlK;pts.push({ds,tss:t,ctl:Math.round(curCTL*10)/10,atl:Math.round(curATL*10)/10,tsb:Math.round((curCTL-curATL)*10)/10});}
-  return pts;
+  const allPts=[];for(let i=totalDays-1;i>=0;i--){const d=new Date(now2);d.setDate(d.getDate()-i);const ds=d.toISOString().slice(0,10);const t=byDate[ds]||0;curCTL=curCTL*(1-ctlK)+t*ctlK;curATL=curATL*(1-atlK)+t*atlK;allPts.push({ds,tss:t,ctl:Math.round(curCTL*10)/10,atl:Math.round(curATL*10)/10,tsb:Math.round((curCTL-curATL)*10)/10});}
+  return allPts.slice(-displayDays);
 }
 function renderLoad(){
   const grd=document.getElementById('loadGrd');if(!grd)return;
@@ -976,7 +977,7 @@ function renderLoad(){
     <div class="scard"><div class="scard-v" style="color:#5c8eff">${last.ctl}</div><div class="scard-l">CTL (Fitness)</div></div>
     <div class="scard"><div class="scard-v" style="color:#ff9f43">${last.atl}</div><div class="scard-l">ATL (Ermüdung)</div></div>
     <div class="scard"><div class="scard-v" style="color:${tsbCol}">${last.tsb>=0?'+':''}${last.tsb}</div><div class="scard-l">Form/TSB</div></div>
-    <div class="scard"><div class="scard-v">${Object.values(byDate).reduce((a,v)=>a+v,0)}</div><div class="scard-l">Gesamt-TSS</div></div>`;
+    <div class="scard"><div class="scard-v">${S.sessions.reduce((a,s)=>{const t=calcTSS(s);return a+(t||0);},0)}</div><div class="scard-l">Gesamt-TSS</div></div>`;
   drawLoadChart(pts);drawTSSChart(pts);
   // TSB explanation
   const tsbZone=last.tsb>25?{lbl:'Form-Peak 🎯',desc:'Optimal für Wettkampf oder Leistungstest. Du bist ausgeruht und konditioniert.',col:'#34d058'}:last.tsb>=0?{lbl:'Trainiert & frisch ✅',desc:'Ideale Balance. Gut erholt, Fitness aufgebaut. Normales Training möglich.',col:'#5c8eff'}:last.tsb>=-10?{lbl:'Leicht ermüdet 🔄',desc:'Normales Trainingsermüdung. Kein Problem – du baust gerade auf.',col:'#f59e0b'}:last.tsb>=-30?{lbl:'Ermüdet 😴',desc:'Hohe Belastung. Ausreichend schlafen, auf Erholungszeichen achten.',col:'#f59e0b'}:{lbl:'Übertraining-Gefahr ⚠️',desc:'Sehr hohes Defizit. Mindestens 3–5 Ruhetage einplanen.',col:'#ef4444'};
@@ -1124,7 +1125,7 @@ function recScore(tsb,restHR){
 }
 
 function renderCoach(){
-  const pts=getLoadPts(14);
+  const pts=getLoadPts(60);
   if(!pts.length)return;
   const last=pts[pts.length-1];
   const prev7=pts[Math.max(0,pts.length-8)];
@@ -1148,7 +1149,7 @@ function renderCoach(){
 }
 
 function generatePlan(){
-  const pts=getLoadPts(14);const last=pts[pts.length-1];
+  const pts=getLoadPts(60);const last=pts[pts.length-1];
   const prev7=pts[Math.max(0,pts.length-8)];
   const atlGrowth=prev7.atl>0?Math.round((last.atl-prev7.atl)/prev7.atl*100):0;
   const phase=coachPhase(last.tsb,last.ctl,atlGrowth);
