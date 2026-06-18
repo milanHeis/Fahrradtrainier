@@ -410,7 +410,7 @@ const TT={
 const DN=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const BC={b1:'#5c8eff',b2:'#34d058'};
-const APP_VERSION='1.2.2';
+const APP_VERSION='1.2.3';
 
 let S={plan:{0:'rest',1:'rest',2:'z2',3:'z2',4:'intervals_z3z4',5:'intervals_z4',6:'rest'},
   bikes:{b1:'Tracking-Bike',b2:'Gravelbike'},hrMin:80,hrMax:195,sessions:[],deleted:[],updatedAt:'',
@@ -816,7 +816,7 @@ function drawHRChart(s,chartId,togglesId,zoneId,driftId){
     redraw(null);
     attachTip(c,(xFrac,cx,cy)=>{
       const durSec=rHR.length?rHR[rHR.length-1].t:0;const tSec=Math.round(xFrac*durSec);
-      const hrNow=interpAt(rHR,xFrac,'t','h');const spdNow=ovs.spd?interpAt(rSp,xFrac,'t','s'):null;const altNow=ovs.alt?interpAt(rAl,xFrac,'t','e'):null;
+      const hrNow=interpAt(rHR,xFrac,'t','hr');const spdNow=ovs.spd?interpAt(rSp,xFrac,'t','s'):null;const altNow=ovs.alt?interpAt(rAl,xFrac,'t','e'):null;
       let html=`<div style="color:#7880a0;margin-bottom:2px">⏱ ${fmtMin(tSec)}</div>`;
       if(hrNow!==null)html+=`<div><span style="color:#e84393">💓 Puls</span>: <strong>${Math.round(hrNow)} bpm</strong></div>`;
       if(spdNow!==null)html+=`<div><span style="color:#ff9f43">📈 Tempo</span>: <strong>${spdNow.toFixed(1)} km/h</strong></div>`;
@@ -838,7 +838,7 @@ function drawHRCanvas(canvas,hrs,spd,alt,hrMax,ovs,crossFrac){
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
   const pad={t:8,b:18,l:34,r:8};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
   const z4t=hrMax*.85,z3t=hrMax*.75;
-  const hrVals=hrs.map(p=>p.h).filter(x=>x&&x>0);
+  const hrVals=hrs.map(p=>p.hr).filter(x=>x&&x>0);
   const hrMin2=hrVals.length?Math.min(...hrVals)-5:60;const hrMax2=hrVals.length?Math.max(...hrVals)+5:hrMax;
   const hrDur=hrs.length?hrs[hrs.length-1].t||1:1;
   const toX=t=>pad.l+t/hrDur*cW;const toYhr=h=>pad.t+(1-(h-hrMin2)/(hrMax2-hrMin2))*cH;
@@ -852,7 +852,7 @@ function drawHRCanvas(canvas,hrs,spd,alt,hrMax,ovs,crossFrac){
   if(ovs.spd&&spd.length){const sMax=Math.max(...spd.map(p=>p.s))||1;ctx.strokeStyle='#ff9f43';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();spd.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-p.s/sMax)*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
   if(ovs.alt&&alt.length){const aVals=alt.map(p=>p.e);const aMin=Math.min(...aVals),aMax=Math.max(...aVals)-Math.min(...aVals)||1;ctx.strokeStyle='#54a0ff';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();alt.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-(p.e-Math.min(...aVals))/aMax)*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
   // HR line
-  if(hrs.length){ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();let first=true;hrs.forEach(p=>{if(!p.h||p.h<=0)return;const x=toX(p.t),y=toYhr(p.h);if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);});ctx.stroke();}
+  if(hrs.length){ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();let first=true;hrs.forEach(p=>{if(!p.hr||p.hr<=0)return;const x=toX(p.t),y=toYhr(p.hr);if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);});ctx.stroke();}
   // Axis labels
   ctx.fillStyle='#7880a0';ctx.font='9px sans-serif';ctx.textAlign='right';
   ctx.fillText(Math.round(hrMax2),pad.l-2,pad.t+4);ctx.fillText(Math.round(hrMin2),pad.l-2,pad.t+cH+4);
@@ -860,12 +860,12 @@ function drawHRCanvas(canvas,hrs,spd,alt,hrMax,ovs,crossFrac){
   const ticks=4;for(let i=0;i<=ticks;i++){const t=i/ticks*hrDur;const x=toX(t);ctx.fillStyle='#7880a0';ctx.textAlign='center';ctx.fillText(fmtMin(Math.round(t)),x,H-2);}
   // Crosshair
   if(crossFrac!==null&&crossFrac!==undefined){const cx=pad.l+crossFrac*cW;ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(cx,pad.t);ctx.lineTo(cx,pad.t+cH);ctx.stroke();ctx.setLineDash([]);
-    const hr=interpAt(hrs,crossFrac,'t','h');if(hr){const cy=toYhr(hr);ctx.fillStyle='#e84393';ctx.beginPath();ctx.arc(cx,cy,3.5,0,Math.PI*2);ctx.fill();}}
+    const hr=interpAt(hrs,crossFrac,'t','hr');if(hr){const cy=toYhr(hr);ctx.fillStyle='#e84393';ctx.beginPath();ctx.arc(cx,cy,3.5,0,Math.PI*2);ctx.fill();}}
 }
 function drawZoneBar(s,el,hrMax){
   const hrs=s.hrSeries||[];if(!hrs.length){el.innerHTML='';return;}
   const z4t=hrMax*.85,z3t=hrMax*.75;let z2=0,z3=0,z4=0;
-  hrs.forEach(p=>{if(p.h>=z4t)z4++;else if(p.h>=z3t)z3++;else z2++;});
+  hrs.forEach(p=>{if(p.hr>=z4t)z4++;else if(p.hr>=z3t)z3++;else z2++;});
   const tot=z2+z3+z4||1;
   el.innerHTML=`<div style="font-size:.72rem;color:#7880a0;margin-bottom:4px">HF-Zonen</div><div style="display:flex;height:10px;border-radius:5px;overflow:hidden;gap:1px">
     <div style="flex:${z2};background:#34d058" title="Z2 ${Math.round(z2/tot*100)}%"></div>
@@ -880,8 +880,8 @@ function drawZoneBar(s,el,hrMax){
 function drawDrift(s,el){
   const hrs=s.hrSeries||[];if(hrs.length<4){el.innerHTML='';return;}
   const mid=Math.floor(hrs.length/2);
-  const a1=hrs.slice(0,mid).filter(p=>p.h).reduce((a,p,_,ar)=>a+p.h/ar.length,0);
-  const a2=hrs.slice(mid).filter(p=>p.h).reduce((a,p,_,ar)=>a+p.h/ar.length,0);
+  const a1=hrs.slice(0,mid).filter(p=>p.hr).reduce((a,p,_,ar)=>a+p.hr/ar.length,0);
+  const a2=hrs.slice(mid).filter(p=>p.hr).reduce((a,p,_,ar)=>a+p.hr/ar.length,0);
   const dr=Math.round((a2-a1)*10)/10;
   const col=dr>5?'#ef4444':dr>0?'#f59e0b':'#34d058';
   el.innerHTML=`<div style="font-size:.72rem;color:#7880a0">Kardialer Drift: <span style="color:${col};font-weight:700">${dr>0?'+':''}${dr} bpm</span> (1. Hälfte → 2. Hälfte)</div>`;
