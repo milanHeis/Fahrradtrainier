@@ -103,6 +103,15 @@ tr:hover td{background:var(--card2)}
 .nutr-val{font-size:1.05rem;font-weight:700;color:var(--accent)}
 .nutr-unit{font-size:.72rem;color:var(--muted)}
 .nutr-hint{font-size:.68rem;color:var(--muted);margin-top:7px;line-height:1.45;padding-top:6px;border-top:1px solid var(--border)}
+.det-ov{display:none;position:fixed;inset:0;background:var(--bg);z-index:250;overflow-y:auto}
+.det-ov.on{display:block}
+.det-hdr{background:var(--card);border-bottom:1px solid var(--border);padding:12px 18px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:1}
+.det-body{padding:16px 18px;max-width:920px;margin:0 auto}
+.det-map{height:250px;background:var(--card2);border-radius:12px;overflow:hidden;margin-bottom:13px;position:relative}
+.det-map-ph{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:.82rem}
+.det-sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:13px}
+.weather-badge{display:inline-flex;align-items:center;gap:4px;background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:.79rem;margin-bottom:12px}
+.load-zone{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
 </style>
 </head>
 <body>
@@ -119,6 +128,8 @@ tr:hover td{background:var(--card2)}
   <div class="tb on" onclick="tab('week')">📅 Woche</div>
   <div class="tb" onclick="tab('log')">📋 Protokoll</div>
   <div class="tb" onclick="tab('stats')">📊 Auswertung</div>
+  <div class="tb" onclick="tab('load')">🏋 Training Load</div>
+  <div class="tb" onclick="tab('health')">🫀 Gesundheit</div>
   <div class="tb" onclick="tab('nutrition')">🥤 Ernährung</div>
   <div class="tb" onclick="tab('settings')">⚙️ Einstellungen</div>
 </div>
@@ -177,6 +188,44 @@ tr:hover td{background:var(--card2)}
       <div id="zoneBarW" style="margin-top:8px"></div>
       <div id="driftW" style="margin-top:8px"></div>
       <div id="elChartW" class="cwrap" style="margin-top:8px;display:none"></div>
+    </div>
+  </div>
+
+  <div id="v-load" class="vw">
+    <div class="sg" id="loadGrd"></div>
+    <div class="cbox">
+      <div class="cbox-head">
+        <div><h3>📈 Training Load – Fitness &amp; Form</h3>
+        <div class="csub">CTL (blau) = Fitness, 42-Tage-Trend · ATL (orange) = Ermüdung, 7-Tage-Trend · Form/TSB (grün) = CTL−ATL. Positiv = frisch, negativ = aufgebaut.</div></div>
+      </div>
+      <canvas id="loadChart" height="170"></canvas>
+    </div>
+    <div class="cbox"><h3>📊 Tages-TSS (letzte 60 Tage)</h3>
+      <div class="csub">Training Stress Score pro Tag: Dauer × (Ø HF ÷ HFmax)² × 100. Hoher Wert = intensiver Tag.</div>
+      <canvas id="tssChart" height="90"></canvas>
+    </div>
+    <div class="cbox"><h3>📋 Wochenübersicht Load</h3>
+      <div class="tbl-w"><table><thead><tr><th>Woche</th><th>TSS</th><th>Einheiten</th><th>Distanz</th></tr></thead><tbody id="loadWeekBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div id="v-health" class="vw">
+    <div class="sset"><h3>📥 Samsung Health HTML-Import</h3>
+      <p>Exportiere deinen Pulsverlauf aus Samsung Health als HTML und importiere ihn hier oder teile ihn direkt an diese App. Die App liest automatisch alle mit „Entspannt" markierten Ruhepuls-Werte.</p>
+      <div class="note">💡 Samsung Health → Gesundheitsübersicht → Herzfrequenz → ⋮ Menü → Als Datei exportieren → HTML → Teilen → Trainingsplan</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn bp bsm" onclick="document.getElementById('hrFileIn').click()">📂 HTML-Datei wählen</button>
+        <input type="file" id="hrFileIn" accept=".html,text/html" style="display:none" onchange="onHRFile(event)">
+      </div>
+      <div id="hrImportStatus" style="margin-top:8px;font-size:.8rem;color:var(--muted)"></div>
+    </div>
+    <div class="cbox" id="hrTrendBox">
+      <div class="cbox-head">
+        <div><h3>🫀 Ruhepuls-Trend</h3>
+        <div class="csub">Täglicher Ruhepuls (Samsung Health „Entspannt"). Ein dauerhafter Anstieg &gt; 5 bpm über den Normalwert kann auf Übertraining oder Krankheit hinweisen.</div></div>
+      </div>
+      <canvas id="hrRestChart" height="150"></canvas>
+      <div id="hrRestStats" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -289,6 +338,27 @@ tr:hover td{background:var(--card2)}
   </div>
 </div>
 
+<div class="det-ov" id="sessDetail">
+  <div class="det-hdr">
+    <button class="btn bs bsm" onclick="closeSessDetail()">← Zurück</button>
+    <span id="detTitle" style="font-weight:700;font-size:.93rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button class="btn bs bsm" id="detEditBtn">✏️ Bearbeiten</button>
+  </div>
+  <div class="det-body">
+    <div id="detWeather"></div>
+    <div id="detMap" class="det-map"><div class="det-map-ph">Karte wird geladen…</div></div>
+    <div class="det-sg" id="detStats"></div>
+    <div class="cbox" id="detHRBox" style="display:none">
+      <div id="detOvToggles" style="margin-bottom:8px"></div>
+      <div id="detHRChart" class="cwrap"></div>
+      <div id="detZoneBar" style="margin-top:8px"></div>
+      <div id="detDrift" style="margin-top:8px"></div>
+    </div>
+    <div id="detElBox" class="cbox" style="display:none"><h3>⛰ Höhenprofil</h3><div id="detEl" class="cwrap"></div></div>
+    <div id="detNotesBox" class="cbox" style="display:none"><h3>📝 Notizen</h3><p id="detNotesText" style="font-size:.85rem;line-height:1.6;color:var(--muted)"></p></div>
+  </div>
+</div>
+
 <div class="ov" id="modal">
 <div class="mod">
   <h2 id="mTitle">Training eintragen</h2>
@@ -299,7 +369,7 @@ tr:hover td{background:var(--card2)}
   <input type="file" id="gpxIn" accept=".gpx,text/xml,application/xml" onchange="onGPX(event)">
   <div id="hrWarn" class="warn" style="display:none"></div>
   <div class="fr"><div class="fg"><label>Datum</label><input type="date" id="mDate"></div>
-    <div class="fg"><label>Richtung</label><select id="mDir"><option value="Hinweg">Hinweg</option><option value="Rückweg" selected>Rückweg</option><option value="Gesamt">Gesamt (H+R)</option></select></div></div>
+    <div class="fg"><label>Richtung</label><select id="mDir"><option value="Hinweg">Hinweg</option><option value="Rückweg" selected>Rückweg</option><option value="Gesamt">Gesamt (H+R)</option><option value="Trainingsfahrt">🚴 Trainingsfahrt</option><option value="Tagestour">🗺 Tagestour</option><option value="Sonstiges">Sonstiges</option></select></div></div>
   <div class="fr">
     <div class="fg"><label>Fahrrad</label><select id="mBike"><option value="b1">🚴 Tracking-Bike</option><option value="b2">🪨 Gravelbike</option></select></div>
     <div class="fg"><label>Trainingstyp</label><select id="mType"><option value="z2">🟢 Z2 Locker</option><option value="intervals_z3z4">🟡 4×6 Z3–Z4</option><option value="intervals_z4">🔴 2×10 Z4</option><option value="rest">😴 Ruhetag</option><option value="other">🚴 Sonstiges</option></select></div>
@@ -339,11 +409,11 @@ const TT={
 const DN=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const BC={b1:'#5c8eff',b2:'#34d058'};
-const APP_VERSION='1.1.0';
+const APP_VERSION='1.2.0';
 
 let S={plan:{0:'rest',1:'rest',2:'z2',3:'z2',4:'intervals_z3z4',5:'intervals_z4',6:'rest'},
   bikes:{b1:'Tracking-Bike',b2:'Gravelbike'},hrMin:80,hrMax:195,sessions:[],deleted:[],updatedAt:'',
-  gistToken:'',gistId:'',nutrition:{weight:null,sweat:'med'}};
+  gistToken:'',gistId:'',nutrition:{weight:null,sweat:'med'},restingHR:[]};
 let wkOff=0,editId=null,tmpGPX=null,statPeriod='week',dirHandle=null,asPending=false,curSessId=null,overlays={speed:false,alt:false},pushTimer=null;
 
 // ===== STORAGE =====
@@ -373,9 +443,9 @@ function timeInZones(s){if(!s.hrSeries)return null;const v=s.hrSeries.filter(p=>
   const t=v.length;return{low:Math.round(lo/t*100),mid:Math.round(mi/t*100),high:Math.round(hi/t*100)}}
 
 // ===== TABS =====
-function tab(t){document.querySelectorAll('.tb').forEach((el,i)=>el.classList.toggle('on',['week','log','stats','nutrition','settings'][i]===t));
+function tab(t){document.querySelectorAll('.tb').forEach((el,i)=>el.classList.toggle('on',['week','log','stats','load','health','nutrition','settings'][i]===t));
   document.querySelectorAll('.vw').forEach(v=>v.classList.remove('on'));document.getElementById('v-'+t).classList.add('on');
-  if(t==='stats')renderStats();if(t==='log')renderLog();if(t==='settings')initSettings();if(t==='nutrition')renderNutrition();}
+  if(t==='stats')renderStats();if(t==='log')renderLog();if(t==='settings')initSettings();if(t==='nutrition')renderNutrition();if(t==='load')renderLoad();if(t==='health')renderHealth();}
 
 // ===== WEEK =====
 function wk(d){wkOff+=d;renderWeek()}
@@ -450,8 +520,14 @@ function parseGPX(txt){
       if(dt>0){const sp=dd/dt;if(sp>=0&&sp<=90)speedSeries.push({t:Math.round(t),s:Math.round(sp*10)/10})}
       if(pts[i].ele!==null&&!isNaN(pts[i].ele))altSeries.push({t:Math.round(t),e:Math.round(pts[i].ele)});
       lastSp=t}}
+  const trackStep=Math.max(0.04,dist/600);
+  const track=[];let trackLastD=-trackStep;
+  pts.forEach((p,i)=>{if(dists[i]-trackLastD>=trackStep){track.push([+(p.lat.toFixed(5)),+(p.lon.toFixed(5))]);trackLastD=dists[i]}});
   return{date:fmt(pts[0].time),duration:`${dm}:${String(ds).padStart(2,'0')}`,durationSec:durSec,
-    distance:Math.round(dist*100)/100,avgSpeed:avgSpd,maxSpeed:maxSpd,heartRate:avgHR,hrValidPercent:hrValidPct,hrSeries,elevSeries,speedSeries,altSeries};
+    distance:Math.round(dist*100)/100,avgSpeed:avgSpd,maxSpeed:maxSpd,heartRate:avgHR,hrValidPercent:hrValidPct,
+    hrSeries,elevSeries,speedSeries,altSeries,track,
+    startLat:Math.round(pts[0].lat*10000)/10000,startLon:Math.round(pts[0].lon*10000)/10000,
+    startTime:pts[0].time.toISOString()};
 }
 
 // ===== CHARTS =====
@@ -579,6 +655,10 @@ function processGPX(f){const r=new FileReader();
     document.getElementById('mMax').value=res.maxSpeed;if(res.heartRate)document.getElementById('mHR').value=res.heartRate;
     document.getElementById('gpxCont').innerHTML=`<div class="gpx-icon">✅</div><p style="color:var(--z2);font-weight:700">${f.name}</p><p style="color:var(--muted)">${res.distance} km · ${res.duration} · ${res.heartRate?res.heartRate+' bpm':'keine HF'}</p>`;
     document.getElementById('gpxDrop').className='gpx-drop ok';showWarn(res.hrValidPercent);showCharts(res);
+    if(res.startLat&&res.startLon&&res.startTime){
+      const h=new Date(res.startTime).getHours();
+      fetchWeather(res.startLat,res.startLon,res.date,h).then(w=>{if(w&&tmpGPX)tmpGPX.weather=w});
+    }
   }catch(err){document.getElementById('gpxCont').innerHTML=`<div class="gpx-icon">❌</div><p style="color:var(--z4)">${err.message}</p>`;document.getElementById('gpxDrop').className='gpx-drop err'}};
   r.readAsText(f)}
 function onGPX(e){const f=e.target.files[0];if(f)processGPX(f)}
@@ -599,6 +679,8 @@ function saveSess(){
     heartRate:parseInt(document.getElementById('mHR').value)||null,
     hrValidPercent:gd?.hrValidPercent??null,hrSeries:gd?.hrSeries||null,elevSeries:gd?.elevSeries||null,
     speedSeries:gd?.speedSeries||null,altSeries:gd?.altSeries||null,
+    track:gd?.track||null,startLat:gd?.startLat||null,startLon:gd?.startLon||null,startTime:gd?.startTime||null,
+    weather:tmpGPX?.weather||ex?.weather||null,
     notes:document.getElementById('mNote').value,ts:new Date().toISOString()};
   if(editId){const i=S.sessions.findIndex(x=>x.id===editId);if(i>-1)S.sessions[i]=s}else S.sessions.push(s);
   save();closeModal();renderWeek();
@@ -615,13 +697,239 @@ function renderLog(){
   tbl.style.display='';empty.style.display='none';
   body.innerHTML=sorted.map(s=>{const tt=TT[s.type]||TT.other,d=new Date(s.date+'T12:00:00'),bn=S.bikes[s.bike]||'–',e=ef(s);
     const hrPct=s.hrValidPercent!==null?`<span style="color:${s.hrValidPercent<90?'var(--z3)':'var(--z2)'}">${s.hrValidPercent}%</span>`:'–';
-    return`<tr><td>${d.getDate()}. ${MN[d.getMonth()]} ${d.getFullYear()}</td>
+    const wth=s.weather?`${weatherIcon(s.weather.code)} ${s.weather.tempMax!==null?Math.round(s.weather.tempMax)+'°':''}`:
+      s.startLat?'<span style="color:var(--muted);font-size:.7rem">…</span>':'–';
+    return`<tr onclick="openSessDetail('${s.id}')" style="cursor:pointer" title="Details ansehen">
+      <td>${d.getDate()}. ${MN[d.getMonth()]} ${d.getFullYear()}</td>
       <td style="font-size:.78rem;color:${BC[s.bike]||'inherit'}">${bn}</td><td style="color:var(--muted);font-size:.78rem">${s.direction||'–'}</td>
       <td><span class="badge" style="background:${tt.c}">${tt.e} ${tt.l}</span></td>
       <td>${s.duration||'–'}</td><td>${s.distance?s.distance+' km':'–'}</td>
       <td>${s.avgSpeed?s.avgSpeed+' km/h':'–'}</td><td>${s.maxSpeed?s.maxSpeed+' km/h':'–'}</td>
       <td>${s.heartRate?s.heartRate+' bpm':'–'}</td><td>${e!==null?'<strong>'+e+'</strong>':'–'}</td><td>${hrPct}</td>
-      <td><button class="btn bs bsm" onclick="openModal('${s.date}','${s.id}')">✏️</button></td></tr>`}).join('');
+      <td>${wth}</td>
+      <td onclick="event.stopPropagation()"><button class="btn bs bsm" onclick="openModal('${s.date}','${s.id}')">✏️</button></td></tr>`}).join('');
+}
+
+// ===== WEATHER =====
+const WM_DE={0:'Klar',1:'Überw. klar',2:'Teilbewölkt',3:'Bewölkt',45:'Nebel',48:'Raureif',51:'Nieseln',53:'Nieseln',55:'Nieseln',61:'Regen',63:'Regen',65:'Starkregen',71:'Schnee',73:'Schnee',75:'Schnee',77:'Eiskörner',80:'Regenschauer',81:'Regenschauer',82:'Gewitter-Schauer',85:'Schneeschauer',86:'Schneeschauer',95:'Gewitter',96:'Gewitter+Hagel',99:'Schweres Gewitter'};
+function weatherIcon(c){const m={0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',61:'🌧',63:'🌧',65:'⛈',71:'❄️',73:'❄️',75:'❄️',77:'❄️',80:'🌦',81:'🌧',82:'⛈',85:'❄️',86:'❄️',95:'⛈',96:'⛈',99:'⛈'};return m[c]||'🌡';}
+async function fetchWeather(lat,lon,dateStr,hour){try{
+  const today=new Date().toISOString().slice(0,10);
+  const daysAgo=(new Date(today)-new Date(dateStr))/(864e5);
+  const baseUrl=daysAgo>6?'https://archive-api.open-meteo.com/v1/archive':'https://api.open-meteo.com/v1/forecast';
+  const url=`${baseUrl}?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&hourly=weathercode,temperature_2m&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FBerlin`;
+  const r=await fetch(url);if(!r.ok)return null;const d=await r.json();
+  const h=Math.min(hour,23);
+  const code=d.hourly?.weathercode?.[h]??d.daily?.weathercode?.[0]??null;
+  const temp=d.hourly?.temperature_2m?.[h]??null;
+  const tMax=d.daily?.temperature_2m_max?.[0]??null;
+  const tMin=d.daily?.temperature_2m_min?.[0]??null;
+  return{code,temp:temp!==null?Math.round(temp):null,tempMax:tMax!==null?Math.round(tMax):null,tempMin:tMin!==null?Math.round(tMin):null};
+}catch{return null;}}
+
+// ===== SESSION DETAIL =====
+let _leafletLoaded=false,_leafletMap=null;
+function openSessDetail(id){
+  const s=S.sessions.find(x=>x.id===id);if(!s)return;
+  const ov=document.getElementById('sessDetail');ov.classList.add('on');
+  const d=new Date(s.date+'T12:00:00'),tt=TT[s.type]||TT.other,bn=S.bikes[s.bike]||'–';
+  document.getElementById('detTitle').textContent=`${tt.e} ${d.getDate()}. ${MN[d.getMonth()]} ${d.getFullYear()} · ${s.direction||bn}`;
+  document.getElementById('detEditBtn').onclick=()=>{closeSessDetail();openModal(s.date,s.id)};
+  const wBox=document.getElementById('detWeather');
+  if(s.weather){const w=s.weather;wBox.innerHTML=`<div class="weather-badge">${weatherIcon(w.code)} ${WM_DE[w.code]||''}${w.temp!==null?' · '+w.temp+'°C':''} ${w.tempMin!==null?'('+w.tempMin+'–'+w.tempMax+'°)':''}</div>`}else{wBox.innerHTML=''}
+  const sg=[
+    {l:'Dauer',v:s.duration||'–'},{l:'Distanz',v:s.distance?s.distance+' km':'–'},
+    {l:'Ø Tempo',v:s.avgSpeed?s.avgSpeed+' km/h':'–'},{l:'Max Tempo',v:s.maxSpeed?s.maxSpeed+' km/h':'–'},
+    {l:'Ø Puls',v:s.heartRate?s.heartRate+' bpm':'–'},{l:'EF',v:ef(s)!==null?ef(s):'–'},
+    {l:'Fahrrad',v:bn},{l:'Typ',v:tt.l}
+  ];
+  document.getElementById('detStats').innerHTML=sg.map(x=>`<div class="scard"><div class="scard-v">${x.v}</div><div class="scard-l">${x.l}</div></div>`).join('');
+  const hrBox=document.getElementById('detHRBox');
+  if(s.hrSeries&&s.hrSeries.length){hrBox.style.display='';
+    document.getElementById('detOvToggles').innerHTML='';
+    drawHRChart(s,'detHRChart','detOvToggles','detZoneBar','detDrift');
+  }else hrBox.style.display='none';
+  const elBox=document.getElementById('detElBox');
+  if(s.altSeries&&s.altSeries.length){elBox.style.display='';drawElevChart(s,'detEl');}else elBox.style.display='none';
+  const notesBox=document.getElementById('detNotesBox');
+  if(s.notes){notesBox.style.display='';document.getElementById('detNotesText').textContent=s.notes;}else notesBox.style.display='none';
+  initDetMap(s);
+}
+function closeSessDetail(){document.getElementById('sessDetail').classList.remove('on');if(_leafletMap){_leafletMap.remove();_leafletMap=null;}}
+function initDetMap(s){
+  const el=document.getElementById('detMap');
+  if(_leafletMap){_leafletMap.remove();_leafletMap=null;}
+  if(!s.track||s.track.length<2){el.innerHTML='<div class="det-map-ph">Keine Kartendaten (GPX erforderlich)</div>';return;}
+  el.innerHTML='';
+  const loadLeaflet=()=>{
+    _leafletMap=L.map(el);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(_leafletMap);
+    const poly=L.polyline(s.track,{color:'#5c8eff',weight:3}).addTo(_leafletMap);
+    _leafletMap.fitBounds(poly.getBounds(),{padding:[10,10]});
+    if(s.track.length){
+      L.circleMarker(s.track[0],{radius:6,color:'#34d058',fillColor:'#34d058',fillOpacity:1}).addTo(_leafletMap).bindPopup('Start');
+      L.circleMarker(s.track[s.track.length-1],{radius:6,color:'#ff4f4f',fillColor:'#ff4f4f',fillOpacity:1}).addTo(_leafletMap).bindPopup('Ende');
+    }
+  };
+  if(typeof L!=='undefined'){loadLeaflet();}else{
+    const link=document.createElement('link');link.rel='stylesheet';link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';document.head.appendChild(link);
+    const sc=document.createElement('script');sc.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';sc.onload=loadLeaflet;document.head.appendChild(sc);
+  }
+}
+
+function drawHRChart(s,chartId,togglesId,zoneId,driftId){
+  const MAX_PTS=300;const hrs=s.hrSeries||[];const spd=s.speedSeries||[];const alt=s.altSeries||[];
+  const hrMax=S.hrMax||195;const z4=hrMax*.85,z3=hrMax*.75;
+  const step=Math.max(1,Math.floor(hrs.length/MAX_PTS));
+  const rHR=[],rSp=[],rAl=[];
+  for(let i=0;i<hrs.length;i+=step)rHR.push(hrs[i]);
+  for(let i=0;i<spd.length;i+=step)rSp.push(spd[i]);
+  for(let i=0;i<alt.length;i+=step)rAl.push(alt[i]);
+  const canvas=document.getElementById(chartId);canvas.innerHTML='';
+  const c=document.createElement('canvas');c.height=180;canvas.appendChild(c);
+  let activeOvs={spd:false,alt:false};
+  const togDiv=document.getElementById(togglesId);
+  if(togDiv){togDiv.innerHTML=`<button class="btn bs bsm" onclick="detToggleOv('spd','${chartId}','${togglesId}','${zoneId}','${driftId}',${JSON.stringify(s).replace(/</g,'\\u003c')})">📈 Geschwindigkeit</button> <button class="btn bs bsm" onclick="detToggleOv('alt','${chartId}','${togglesId}','${zoneId}','${driftId}',${JSON.stringify(s).replace(/</g,'\\u003c')})">⛰ Höhenprofil</button>`}
+  drawHRCanvas(c,rHR,rSp,rAl,hrMax,activeOvs);
+  if(zoneId){const zEl=document.getElementById(zoneId);if(zEl)drawZoneBar(s,zEl,hrMax);}
+  if(driftId){const dEl=document.getElementById(driftId);if(dEl)drawDrift(s,dEl);}
+}
+function detToggleOv(key,chartId,togglesId,zoneId,driftId,s){
+  const el=document.getElementById(chartId);const c=el.querySelector('canvas');if(!c)return;
+  const st=c.dataset[key]==='1'?'0':'1';c.dataset[key]=st;
+  const hrMax=S.hrMax||195;const hrs=s.hrSeries||[];const sp=s.speedSeries||[];const al=s.altSeries||[];
+  drawHRCanvas(c,hrs,sp,al,hrMax,{spd:c.dataset.spd==='1',alt:c.dataset.alt==='1'});
+}
+function drawHRCanvas(canvas,hrs,spd,alt,hrMax,ovs){
+  const W=canvas.offsetWidth||320,H=canvas.height=180;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,W,H);
+  const pad={t:8,b:18,l:32,r:8};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const z4=hrMax*.85,z3=hrMax*.75;
+  const hrVals=hrs.map(p=>p.h).filter(x=>x);const hrMin2=hrVals.length?Math.min(...hrVals)-5:60;const hrMax2=hrVals.length?Math.max(...hrVals)+5:hrMax;
+  const hrDur=hrs.length?hrs[hrs.length-1].t:1;
+  const toX=t=>pad.l+t/hrDur*cW;const toYhr=h=>pad.t+(1-(h-hrMin2)/(hrMax2-hrMin2))*cH;
+  [[z4,'var(--z4)','20%'],[z3,'var(--z3)','20%']].forEach(([y,c,a])=>{const py=toYhr(y);ctx.fillStyle=c.replace(')',','+a.replace('%','')+'/100)');ctx.globalAlpha=.12;ctx.fillRect(pad.l,pad.t,cW,py-pad.t);ctx.globalAlpha=1;ctx.strokeStyle=c;ctx.globalAlpha=.3;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(pad.l,py);ctx.lineTo(pad.l+cW,py);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1});
+  if(ovs.spd&&spd.length){const spdVals=spd.map(p=>p.s);const sMax=Math.max(...spdVals)||1;ctx.strokeStyle='#ff9f43';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();spd.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-p.s/sMax)*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
+  if(ovs.alt&&alt.length){const aVals=alt.map(p=>p.e);const aMin=Math.min(...aVals),aMax=Math.max(...aVals)||1;ctx.strokeStyle='#54a0ff';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();alt.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-(p.e-aMin)/(aMax-aMin))*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
+  if(hrs.length){ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.globalAlpha=1;ctx.beginPath();hrs.forEach((p,i)=>{const x=toX(p.t),y=toYhr(p.h);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();}
+  ctx.fillStyle='var(--muted,#888)';ctx.font='10px sans-serif';ctx.textAlign='left';ctx.fillText(Math.round(hrMax2),pad.l-30,pad.t+4);ctx.fillText(Math.round(hrMin2),pad.l-30,pad.t+cH);
+}
+function drawZoneBar(s,el,hrMax){
+  const hrs=s.hrSeries||[];if(!hrs.length){el.innerHTML='';return;}
+  const z4t=hrMax*.85,z3t=hrMax*.75;let z2=0,z3=0,z4=0;
+  hrs.forEach(p=>{if(p.h>=z4t)z4++;else if(p.h>=z3t)z3++;else z2++;});
+  const tot=z2+z3+z4||1;
+  el.innerHTML=`<div style="font-size:.72rem;color:var(--muted);margin-bottom:4px">HF-Zonen</div><div style="display:flex;height:10px;border-radius:5px;overflow:hidden;gap:1px">
+    <div style="flex:${z2};background:var(--z2)" title="Z2 ${Math.round(z2/tot*100)}%"></div>
+    <div style="flex:${z3};background:var(--z3)" title="Z3 ${Math.round(z3/tot*100)}%"></div>
+    <div style="flex:${z4};background:var(--z4)" title="Z4+ ${Math.round(z4/tot*100)}%"></div>
+  </div><div style="display:flex;gap:12px;margin-top:4px;font-size:.7rem">
+    <span style="color:var(--z2)">Z2 ${Math.round(z2/tot*100)}%</span>
+    <span style="color:var(--z3)">Z3 ${Math.round(z3/tot*100)}%</span>
+    <span style="color:var(--z4)">Z4+ ${Math.round(z4/tot*100)}%</span>
+  </div>`;
+}
+function drawDrift(s,el){
+  const hrs=s.hrSeries||[];if(hrs.length<4){el.innerHTML='';return;}
+  const mid=Math.floor(hrs.length/2);
+  const a1=hrs.slice(0,mid).filter(p=>p.h).reduce((a,p)=>a+p.h,0)/(mid||1);
+  const a2=hrs.slice(mid).filter(p=>p.h).reduce((a,p)=>a+p.h,0)/((hrs.length-mid)||1);
+  const dr=Math.round((a2-a1)*10)/10;
+  el.innerHTML=`<div style="font-size:.72rem;color:var(--muted)">Kardialer Drift: <span style="color:${dr>5?'var(--z4)':dr>0?'var(--z3)':'var(--z2)'};font-weight:700">${dr>0?'+':''}${dr} bpm</span> (1. Hälfte → 2. Hälfte)</div>`;
+}
+function drawElevChart(s,chartId){
+  const alt=s.altSeries||[];if(!alt.length)return;
+  const W=document.getElementById(chartId)?.offsetWidth||320,H=100;
+  document.getElementById(chartId).innerHTML='';
+  const c=document.createElement('canvas');c.height=H;document.getElementById(chartId).appendChild(c);
+  const ctx=c.getContext('2d');const cW=c.offsetWidth||320;
+  const eVals=alt.map(p=>p.e);const eMin=Math.min(...eVals),eMax=Math.max(...eVals)||1;
+  const dur=alt[alt.length-1].t||1;const pad={t:6,b:18,l:36,r:8};const cH=H-pad.t-pad.b;
+  ctx.fillStyle='rgba(84,160,255,.15)';ctx.strokeStyle='#54a0ff';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(pad.l,H-pad.b);
+  alt.forEach(p=>{const x=pad.l+(p.t/dur)*(cW-pad.l-pad.r);const y=pad.t+(1-(p.e-eMin)/(eMax-eMin))*cH;ctx.lineTo(x,y);});
+  ctx.lineTo(cW-pad.r,H-pad.b);ctx.closePath();ctx.fill();
+  ctx.beginPath();alt.forEach((p,i)=>{const x=pad.l+(p.t/dur)*(cW-pad.l-pad.r);const y=pad.t+(1-(p.e-eMin)/(eMax-eMin))*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+  ctx.fillStyle='var(--muted,#888)';ctx.font='10px sans-serif';ctx.textAlign='left';
+  ctx.fillText(Math.round(eMax)+'m',2,pad.t+8);ctx.fillText(Math.round(eMin)+'m',2,H-pad.b+2);
+}
+
+// ===== TRAINING LOAD =====
+function calcTSS(s){if(!s.durationSec||!s.heartRate||!S.hrMax)return null;const if_=(s.heartRate/S.hrMax);return Math.round(s.durationSec/3600*if_*if_*100);}
+function renderLoad(){
+  const grd=document.getElementById('loadGrd');if(!grd)return;
+  const ctl=[],atl=[],tsb=[],tss=[];
+  const sorted=[...S.sessions].sort((a,b)=>a.date.localeCompare(b.date));
+  const byDate={};sorted.forEach(s=>{const t=calcTSS(s);if(t){byDate[s.date]=(byDate[s.date]||0)+t;}});
+  const days=60;const now=new Date();let curCTL=0,curATL=0;const ctlK=1-Math.exp(-1/42),atlK=1-Math.exp(-1/7);
+  const pts=[];for(let i=days-1;i>=0;i--){const d=new Date(now);d.setDate(d.getDate()-i);const ds=d.toISOString().slice(0,10);const t=byDate[ds]||0;curCTL=curCTL*(1-ctlK)+t*ctlK;curATL=curATL*(1-atlK)+t*atlK;pts.push({ds,tss:t,ctl:Math.round(curCTL*10)/10,atl:Math.round(curATL*10)/10,tsb:Math.round((curCTL-curATL)*10)/10});}
+  grd.innerHTML=`
+    <div class="scard"><div class="scard-v" style="color:var(--accent)">${pts[pts.length-1].ctl}</div><div class="scard-l">CTL (Fitness)</div></div>
+    <div class="scard"><div class="scard-v" style="color:#ff9f43">${pts[pts.length-1].atl}</div><div class="scard-l">ATL (Ermüdung)</div></div>
+    <div class="scard"><div class="scard-v" style="color:${pts[pts.length-1].tsb>=0?'var(--z2)':'var(--z4)'}">${pts[pts.length-1].tsb>=0?'+':''}${pts[pts.length-1].tsb}</div><div class="scard-l">Form/TSB</div></div>
+    <div class="scard"><div class="scard-v">${Object.values(byDate).reduce((a,v)=>a+v,0)}</div><div class="scard-l">Gesamt-TSS</div></div>`;
+  drawLoadChart(pts);drawTSSChart(pts);
+  const bodyEl=document.getElementById('loadWeekBody');if(!bodyEl)return;
+  const weeks={};pts.forEach(p=>{const d=new Date(p.ds);const m=new Date(d);m.setDate(d.getDate()-d.getDay()+1);const wk=m.toISOString().slice(0,10);if(!weeks[wk])weeks[wk]={tss:0,cnt:0,dist:0};weeks[wk].tss+=p.tss;});
+  sorted.forEach(s=>{const d=new Date(s.date);const m=new Date(d);m.setDate(d.getDate()-d.getDay()+1);const wk=m.toISOString().slice(0,10);if(weeks[wk]){weeks[wk].cnt++;weeks[wk].dist+=(s.distance||0);}});
+  bodyEl.innerHTML=Object.entries(weeks).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,12).map(([wk,v])=>{const d=new Date(wk+'T12:00');return`<tr><td>${d.getDate()}. ${MN[d.getMonth()]}</td><td><strong>${Math.round(v.tss)}</strong></td><td>${v.cnt}</td><td>${Math.round(v.dist)} km</td></tr>`}).join('');
+}
+function drawLoadChart(pts){
+  const c=document.getElementById('loadChart');if(!c)return;const W=c.offsetWidth||320,H=c.height=170;const ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  const pad={t:10,b:22,l:36,r:8};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const allV=[...pts.map(p=>p.ctl),...pts.map(p=>p.atl),...pts.map(p=>p.tsb)].filter(x=>x!==undefined);
+  const mn=Math.min(0,...allV),mx=Math.max(...allV)||1;
+  const toX=i=>pad.l+i/(pts.length-1)*cW;const toY=v=>pad.t+(1-(v-mn)/(mx-mn))*cH;
+  const zero=toY(0);ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,zero);ctx.lineTo(pad.l+cW,zero);ctx.stroke();
+  [[pts.map(p=>p.ctl),'#5c8eff',2],[pts.map(p=>p.atl),'#ff9f43',1.5],[pts.map(p=>p.tsb),'#34d058',1.5]].forEach(([vals,col,lw])=>{ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();vals.forEach((v,i)=>{i?ctx.lineTo(toX(i),toY(v)):ctx.moveTo(toX(0),toY(v))});ctx.stroke();});
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='9px sans-serif';[0,Math.floor(pts.length/2),pts.length-1].forEach(i=>{const d=new Date(pts[i].ds+'T12:00');ctx.textAlign='center';ctx.fillText(`${d.getDate()}. ${MN[d.getMonth()]}`,toX(i),H-4);});
+  ctx.fillStyle='rgba(255,255,255,.4)';ctx.textAlign='right';[mn,0,mx].forEach(v=>{ctx.fillText(Math.round(v),pad.l-3,toY(v)+3);});
+}
+function drawTSSChart(pts){
+  const c=document.getElementById('tssChart');if(!c)return;const W=c.offsetWidth||320,H=c.height=90;const ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  const pad={t:6,b:20,l:36,r:8};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const vals=pts.map(p=>p.tss);const mx=Math.max(...vals)||1;const bw=Math.max(1,cW/pts.length-1);
+  pts.forEach((p,i)=>{if(!p.tss)return;const x=pad.l+i/pts.length*cW;const h=p.tss/mx*cH;const d=new Date(p.ds+'T12:00');const isWE=d.getDay()===0||d.getDay()===6;ctx.fillStyle=isWE?'#5c8eff':'rgba(92,142,255,.55)';ctx.fillRect(x,pad.t+cH-h,bw,h);});
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='9px sans-serif';[0,Math.floor(pts.length/2),pts.length-1].forEach(i=>{const d=new Date(pts[i].ds+'T12:00');ctx.textAlign='center';ctx.fillText(`${d.getDate()}. ${MN[d.getMonth()]}`,pad.l+i/pts.length*cW+bw/2,H-4);});
+}
+
+// ===== RESTING HR =====
+function parseHRHtml(html){
+  const GM={'Januar':0,'Februar':1,'März':2,'April':3,'Mai':4,'Juni':5,'Juli':6,'August':7,'September':8,'Oktober':9,'November':10,'Dezember':11};
+  const rows=[];const re=/<tr[^>]*>[\s\S]*?<\/tr>/gi;const tdRe=/<td[^>]*>([\s\S]*?)<\/td>/gi;
+  const nowYear=new Date().getFullYear();
+  for(const row of html.matchAll(re)){const tds=[];let m;tdRe.lastIndex=0;while((m=tdRe.exec(row[0]))!==null)tds.push(m[1].replace(/<[^>]+>/g,'').trim());
+    if(tds.length>=4&&tds[3]==='Entspannt'){const zt=tds[1];const rm=zt.match(/(\d{1,2})\.\s+(\w+)\s+(\d{2}:\d{2})/);
+      if(rm){const day=parseInt(rm[1]),mon=GM[rm[2]],time=rm[3];if(mon!==undefined){const yr=nowYear;const ds=`${yr}-${String(mon+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;const hr=parseInt(tds[2]);if(!isNaN(hr)&&hr>20&&hr<200)rows.push({date:ds,hr});}}}};
+  return rows;
+}
+function mergeRestingHR(entries){
+  if(!S.restingHR)S.restingHR=[];const existing=new Set(S.restingHR.map(e=>e.date));const added=entries.filter(e=>!existing.has(e.date));S.restingHR=[...S.restingHR,...added].sort((a,b)=>a.date.localeCompare(b.date));return added.length;}
+function onHRFile(event){const f=event.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{const added=mergeRestingHR(parseHRHtml(ev.target.result));save();renderHealth();document.getElementById('hrImportStatus').textContent=`✅ ${added} neue Einträge importiert (gesamt ${S.restingHR.length})`;};r.readAsText(f,'UTF-8');}
+async function handleSharedHR(){
+  const p=new URLSearchParams(location.search);if(!p.has('hr_shared'))return;
+  history.replaceState({},'',location.pathname);
+  try{const sc=await caches.open('gpx-share');const res=await sc.match('/_hr_share');if(!res)return;const html=await res.text();await sc.delete('/_hr_share');const added=mergeRestingHR(parseHRHtml(html));save();renderHealth();tab('health');document.getElementById('hrImportStatus').textContent=`✅ ${added} neue Einträge importiert (gesamt ${S.restingHR.length})`;}catch(e){}
+}
+function renderHealth(){
+  const c=document.getElementById('hrRestChart');if(!c)return;const data=(S.restingHR||[]).slice(-90);
+  if(!data.length){c.parentElement.querySelector('.csub').textContent='Noch keine Ruhepuls-Daten. Importiere deine Samsung Health HTML-Datei.';document.getElementById('hrRestStats').innerHTML='';return;}
+  const W=c.offsetWidth||320,H=c.height=150;const ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  const vals=data.map(d=>d.hr);const mn=Math.min(...vals)-3,mx=Math.max(...vals)+3;
+  const pad={t:8,b:20,l:32,r:8};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const toX=i=>pad.l+i/(data.length-1||1)*cW;const toY=v=>pad.t+(1-(v-mn)/(mx-mn))*cH;
+  const avg7=vals.slice(-7).reduce((a,v)=>a+v,0)/Math.min(7,vals.length);
+  const avg30=vals.slice(-30).reduce((a,v)=>a+v,0)/Math.min(30,vals.length);
+  ctx.strokeStyle='rgba(84,160,255,.2)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(pad.l,toY(avg30));ctx.lineTo(pad.l+cW,toY(avg30));ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.beginPath();data.forEach((d,i)=>{i?ctx.lineTo(toX(i),toY(d.hr)):ctx.moveTo(toX(0),toY(d.hr))});ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='9px sans-serif';ctx.textAlign='center';
+  [0,Math.floor(data.length/2),data.length-1].forEach(i=>{if(i<data.length){const d=new Date(data[i].date+'T12:00');ctx.fillText(`${d.getDate()}. ${MN[d.getMonth()]}`,toX(i),H-4);}});
+  ctx.textAlign='right';[mn+3,mx-3].forEach(v=>ctx.fillText(Math.round(v),pad.l-2,toY(v)+3));
+  document.getElementById('hrRestStats').innerHTML=`<div class="sg">
+    <div class="scard"><div class="scard-v">${Math.round(avg7)}</div><div class="scard-l">Ø 7 Tage</div></div>
+    <div class="scard"><div class="scard-v">${Math.round(avg30)}</div><div class="scard-l">Ø 30 Tage</div></div>
+    <div class="scard"><div class="scard-v">${Math.min(...vals)}</div><div class="scard-l">Minimum</div></div>
+    <div class="scard"><div class="scard-v">${Math.max(...vals)}</div><div class="scard-l">Maximum</div></div>
+  </div>`;
 }
 
 // ===== STATS =====
@@ -876,6 +1184,7 @@ function mergeData(remote){
   const del=new Set([...(S.deleted||[]),...(remote.deleted||[])]);
   S.deleted=[...del];S.sessions=Object.values(map).filter(s=>!del.has(s.id));
   if((remote.updatedAt||'')>(S.updatedAt||'')){if(remote.plan)S.plan=remote.plan;if(remote.bikes)S.bikes=remote.bikes;if(remote.hrMin)S.hrMin=remote.hrMin;if(remote.hrMax)S.hrMax=remote.hrMax;if(remote.nutrition)S.nutrition=remote.nutrition}
+  if(remote.restingHR&&remote.restingHR.length)mergeRestingHR(remote.restingHR);
 }
 function onImport(e){const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=ev=>{try{const data=JSON.parse(ev.target.result);
@@ -985,7 +1294,7 @@ loadLS();
 const now=new Date();
 document.getElementById('hDate').textContent=`${DN[now.getDay()]}, ${now.getDate()}. ${MN[now.getMonth()]} ${now.getFullYear()}`;
 document.getElementById('appVer').textContent='v'+APP_VERSION;
-updateAsStatus();updateSyncStatus();renderWeek();initAutoSave();initSync();handleSharedGpx();
+updateAsStatus();updateSyncStatus();renderWeek();initAutoSave();initSync();handleSharedGpx();handleSharedHR();
 </script>
 </body>
 </html>
