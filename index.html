@@ -131,6 +131,7 @@ tr:hover td{background:var(--card2)}
   <div class="tb" onclick="tab('load')">🏋 Training Load</div>
   <div class="tb" onclick="tab('health')">🫀 Gesundheit</div>
   <div class="tb" onclick="tab('nutrition')">🥤 Ernährung</div>
+  <div class="tb" onclick="tab('coach')">🤖 Coach</div>
   <div class="tb" onclick="tab('settings')">⚙️ Einstellungen</div>
 </div>
 <div class="pg">
@@ -285,6 +286,50 @@ tr:hover td{background:var(--card2)}
     </div>
   </div>
 
+  <div id="v-coach" class="vw">
+    <div class="cbox">
+      <div class="cbox-head"><div><h3>🤖 Trainingscoach – Statusanalyse</h3>
+      <div class="csub">Basiert auf deinem aktuellen CTL, ATL, TSB und Ruhepuls-Trend.</div></div></div>
+      <div id="coachStatus"></div>
+    </div>
+    <div class="sset">
+      <h3>🎯 Wochenplan erstellen</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">
+        <div class="fg"><label>Trainingsziel</label>
+          <select id="coachGoal">
+            <option value="endurance">🚴 Grundlagenausdauer</option>
+            <option value="race">🏆 Wettkampfvorbereitung</option>
+            <option value="weightloss">⚖️ Gewicht reduzieren</option>
+            <option value="health">💚 Gesundheit & Wohlbefinden</option>
+          </select>
+        </div>
+        <div class="fg"><label>Tage pro Woche</label>
+          <select id="coachDays">
+            <option value="2">2 Tage</option>
+            <option value="3">3 Tage</option>
+            <option value="4" selected>4 Tage</option>
+            <option value="5">5 Tage</option>
+            <option value="6">6 Tage</option>
+          </select>
+        </div>
+        <div class="fg"><label>Zeit pro Einheit</label>
+          <select id="coachDur">
+            <option value="45">45 min</option>
+            <option value="60" selected>60 min</option>
+            <option value="75">75 min</option>
+            <option value="90">90 min</option>
+            <option value="120">2 Stunden</option>
+          </select>
+        </div>
+        <div class="fg"><label>Zieldatum (optional)</label>
+          <input type="date" id="coachTarget" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;width:100%;box-sizing:border-box">
+        </div>
+      </div>
+      <button class="btn bp" onclick="generatePlan()">🤖 Plan generieren</button>
+    </div>
+    <div id="coachPlan"></div>
+  </div>
+
   <div id="v-settings" class="vw">
     <div class="sset"><h3>☁ Cloud-Sync (GitHub Gist)</h3>
       <p>Synchronisiert alle Daten zwischen PC und Handy über einen privaten GitHub Gist. Anleitung: siehe Chat.</p>
@@ -410,7 +455,7 @@ const TT={
 const DN=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const BC={b1:'#5c8eff',b2:'#34d058'};
-const APP_VERSION='1.2.3';
+const APP_VERSION='1.3.0';
 
 let S={plan:{0:'rest',1:'rest',2:'z2',3:'z2',4:'intervals_z3z4',5:'intervals_z4',6:'rest'},
   bikes:{b1:'Tracking-Bike',b2:'Gravelbike'},hrMin:80,hrMax:195,sessions:[],deleted:[],updatedAt:'',
@@ -444,9 +489,9 @@ function timeInZones(s){if(!s.hrSeries)return null;const v=s.hrSeries.filter(p=>
   const t=v.length;return{low:Math.round(lo/t*100),mid:Math.round(mi/t*100),high:Math.round(hi/t*100)}}
 
 // ===== TABS =====
-function tab(t){document.querySelectorAll('.tb').forEach((el,i)=>el.classList.toggle('on',['week','log','stats','load','health','nutrition','settings'][i]===t));
+function tab(t){document.querySelectorAll('.tb').forEach((el,i)=>el.classList.toggle('on',['week','log','stats','load','health','nutrition','coach','settings'][i]===t));
   document.querySelectorAll('.vw').forEach(v=>v.classList.remove('on'));document.getElementById('v-'+t).classList.add('on');
-  if(t==='stats')renderStats();if(t==='log')renderLog();if(t==='settings')initSettings();if(t==='nutrition')renderNutrition();if(t==='load')renderLoad();if(t==='health')renderHealth();}
+  if(t==='stats')renderStats();if(t==='log')renderLog();if(t==='settings')initSettings();if(t==='nutrition')renderNutrition();if(t==='load')renderLoad();if(t==='health')renderHealth();if(t==='coach')renderCoach();}
 
 // ===== WEEK =====
 function wk(d){wkOff+=d;renderWeek()}
@@ -916,12 +961,16 @@ function drawElevChart(s,chartId){
 
 // ===== TRAINING LOAD =====
 function calcTSS(s){if(!s.durationSec||!s.heartRate||!S.hrMax)return null;const if_=(s.heartRate/S.hrMax);return Math.round(s.durationSec/3600*if_*if_*100);}
+function getLoadPts(days=60){
+  const sorted=[...S.sessions].sort((a,b)=>a.date.localeCompare(b.date));
+  const byDate={};sorted.forEach(s=>{const t=calcTSS(s);if(t)byDate[s.date]=(byDate[s.date]||0)+t;});
+  const now2=new Date();let curCTL=0,curATL=0;const ctlK=1-Math.exp(-1/42),atlK=1-Math.exp(-1/7);
+  const pts=[];for(let i=days-1;i>=0;i--){const d=new Date(now2);d.setDate(d.getDate()-i);const ds=d.toISOString().slice(0,10);const t=byDate[ds]||0;curCTL=curCTL*(1-ctlK)+t*ctlK;curATL=curATL*(1-atlK)+t*atlK;pts.push({ds,tss:t,ctl:Math.round(curCTL*10)/10,atl:Math.round(curATL*10)/10,tsb:Math.round((curCTL-curATL)*10)/10});}
+  return pts;
+}
 function renderLoad(){
   const grd=document.getElementById('loadGrd');if(!grd)return;
-  const sorted=[...S.sessions].sort((a,b)=>a.date.localeCompare(b.date));
-  const byDate={};sorted.forEach(s=>{const t=calcTSS(s);if(t){byDate[s.date]=(byDate[s.date]||0)+t;}});
-  const days=60;const now2=new Date();let curCTL=0,curATL=0;const ctlK=1-Math.exp(-1/42),atlK=1-Math.exp(-1/7);
-  const pts=[];for(let i=days-1;i>=0;i--){const d=new Date(now2);d.setDate(d.getDate()-i);const ds=d.toISOString().slice(0,10);const t=byDate[ds]||0;curCTL=curCTL*(1-ctlK)+t*ctlK;curATL=curATL*(1-atlK)+t*atlK;pts.push({ds,tss:t,ctl:Math.round(curCTL*10)/10,atl:Math.round(curATL*10)/10,tsb:Math.round((curCTL-curATL)*10)/10});}
+  const pts=getLoadPts(60);
   const last=pts[pts.length-1];const tsbCol=last.tsb>25?'#34d058':last.tsb>0?'#5c8eff':last.tsb>-10?'#f59e0b':'#ef4444';
   grd.innerHTML=`
     <div class="scard"><div class="scard-v" style="color:#5c8eff">${last.ctl}</div><div class="scard-l">CTL (Fitness)</div></div>
@@ -957,7 +1006,8 @@ function renderLoad(){
     </div>`;
   const bodyEl=document.getElementById('loadWeekBody');if(!bodyEl)return;
   const weeks={};pts.forEach(p=>{const d=new Date(p.ds);const m=new Date(d);m.setDate(d.getDate()-d.getDay()+1);const wk=m.toISOString().slice(0,10);if(!weeks[wk])weeks[wk]={tss:0,cnt:0,dist:0};weeks[wk].tss+=p.tss;});
-  sorted.forEach(s=>{const d=new Date(s.date);const m=new Date(d);m.setDate(d.getDate()-d.getDay()+1);const wk=m.toISOString().slice(0,10);if(weeks[wk]){weeks[wk].cnt++;weeks[wk].dist+=(s.distance||0);}});
+  const sortedSess=[...S.sessions].sort((a,b)=>a.date.localeCompare(b.date));
+  sortedSess.forEach(s=>{const d=new Date(s.date);const m=new Date(d);m.setDate(d.getDate()-d.getDay()+1);const wk=m.toISOString().slice(0,10);if(weeks[wk]){weeks[wk].cnt++;weeks[wk].dist+=(s.distance||0);}});
   bodyEl.innerHTML=Object.entries(weeks).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,12).map(([wk,v])=>{const d=new Date(wk+'T12:00');return`<tr><td>${d.getDate()}. ${MN[d.getMonth()]}</td><td><strong>${Math.round(v.tss)}</strong></td><td>${v.cnt}</td><td>${Math.round(v.dist)} km</td></tr>`}).join('');
 }
 function drawLoadChart(pts){
@@ -1009,6 +1059,159 @@ function drawTSSChart(pts){
       redraw(xFrac);
     });
   });
+}
+
+// ===== TRAININGSCOACH =====
+const CSESS={
+  rest: {e:'😴',lbl:'Ruhetag',       zone:'–',    bg:'#13151f',desc:'Vollständige Erholung. Leichtes Dehnen oder Spazieren okay.',plan:'rest'},
+  rec:  {e:'🔄',lbl:'Aktive Erholung',zone:'Z1',   bg:'#151824',desc:'Sehr lockere Fahrt unter 70% HFmax. Kein Druck.',plan:'z2'},
+  z2s:  {e:'🟢',lbl:'Z2-Ausdauer',   zone:'Z2',   bg:'#0d1f14',desc:'Grundlagentraining 72–78% HFmax. Kannst dabei problemlos sprechen.',plan:'z2'},
+  z2l:  {e:'🟢',lbl:'Z2 Lang',       zone:'Z2',   bg:'#0d1f14',desc:'Langer Grundlagentag – Kern der Fitnessentwicklung. Fettstoffwechsel.',plan:'z2'},
+  z2xl: {e:'🟢',lbl:'Z2 Extra Lang', zone:'Z2',   bg:'#0d1f14',desc:'Sehr langer Z2-Ritt (2h+). Nur wenn du dich gut erholt fühlst.',plan:'z2'},
+  tempo:{e:'🟡',lbl:'Tempofahrt',    zone:'Z3',   bg:'#201a08',desc:'15 min einfahren → 25–30 min bei 80–87% HFmax → ausfahren.',plan:'intervals_z3z4'},
+  ss:   {e:'🟠',lbl:'Sweet Spot',    zone:'Z3/Z4',bg:'#201200',desc:'10 min warm → 2×15 min bei 88–93% HFmax, je 5 min locker → ausfahren.',plan:'intervals_z3z4'},
+  iv4:  {e:'🔴',lbl:'Z4-Intervalle', zone:'Z4',   bg:'#1f0808',desc:'15 min warm → 4–5×5 min bei 88–95% HFmax, je 3 min Pause → ausfahren.',plan:'intervals_z4'},
+  iv5:  {e:'🔴',lbl:'VO2max',        zone:'Z4+',  bg:'#1f0808',desc:'10 min warm → 5×3 min Vollgas (>95% HFmax), je 3 min locker → ausfahren.',plan:'intervals_z4'},
+  racep:{e:'🏆',lbl:'Wettkampftempo',zone:'Z3+',  bg:'#1a1200',desc:'10 min warm → 35–45 min Wettkampftempo (83–92% HFmax) → ausfahren.',plan:'intervals_z4'},
+};
+const CDAY=['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+function coachPhase(tsb,ctl,atlGrowth){
+  if(tsb<-30||atlGrowth>25)return{id:'danger',lbl:'⚠️ Übertraining-Risiko',col:'#ef4444',desc:'ATL ist sehr hoch oder TSB extrem negativ. Mindestens 3–5 Ruhetage nötig.'};
+  if(tsb<-20||atlGrowth>15)return{id:'fatigue',lbl:'😴 Ermüdet',col:'#ef4444',desc:'Hohe Belastung akkumuliert. Erholungswoche einplanen.'};
+  if(tsb<-5)return{id:'build',lbl:'🔧 Aufbauphase',col:'#f59e0b',desc:'Normale Trainingsermüdung. Du baust Fitness auf – aber auf Schlaf achten.'};
+  if(tsb<15)return{id:'maintain',lbl:'✅ Formphase',col:'#5c8eff',desc:'Gute Balance zwischen Fitness und Erholung. Qualitäts-Sessions sinnvoll.'};
+  if(tsb<35)return{id:'peak',lbl:'🎯 Peak-Form',col:'#34d058',desc:'Ausgeruht und konditioniert. Idealer Zeitpunkt für Wettkampf oder Leistungstest.'};
+  return{id:'fresh',lbl:'🌟 Sehr frisch',col:'#34d058',desc:'Sehr niedriges Ermüdungsniveau. Belastung kann gesteigert werden.'};
+}
+
+function buildCoachWeek(goal,phase,daysPerWeek,durMin){
+  const W=Array(7).fill('rest');
+  if(daysPerWeek<=0)return W;
+  const phId=phase.id;
+  const isRec=phId==='danger'||phId==='fatigue';
+  const baseS=durMin>=90?'z2l':'z2s';
+  const longS=durMin>=100?'z2xl':durMin>=75?'z2l':'z2s';
+  // Quality session types per goal+phase
+  const q1={
+    health:null,weightloss:'tempo',
+    endurance:phId==='peak'||phId==='fresh'?'ss':'tempo',
+    race:phId==='peak'?'racep':phId==='fresh'?'iv5':'iv4'
+  }[goal]||'tempo';
+  const q2={
+    race:phId==='peak'?'iv4':'ss',
+    endurance:'iv4'
+  }[goal]||null;
+  const maxQ=isRec||goal==='health'?0:daysPerWeek<=2?0:daysPerWeek<=4?1:2;
+  let rem=daysPerWeek;
+  // Sat=5: long ride
+  if(rem>0&&daysPerWeek>=2){W[5]=isRec?'rec':longS;rem--;}
+  // Sun=6: second long or rest
+  if(rem>0&&daysPerWeek>=5&&!isRec){W[6]=baseS;rem--;}
+  // Tue=1: quality 1
+  if(maxQ>=1&&rem>0){W[1]=isRec?'rec':q1;rem--;}
+  // Thu=3: quality 2 or base
+  if(rem>0){W[3]=maxQ>=2&&!isRec&&q2?q2:isRec?'rec':baseS;rem--;}
+  // Mon=0, Wed=2, Fri=4 fill
+  for(const d of[0,2,4]){if(rem<=0)break;if(W[d]==='rest'){W[d]=isRec?'rec':baseS;rem--;}}
+  return W;
+}
+
+function recScore(tsb,restHR){
+  let score=50+tsb*2;
+  if(restHR&&restHR.length>=7){const vals=restHR.slice(-30).map(d=>d.hr);const avg30=vals.reduce((a,v)=>a+v,0)/vals.length;const last7=restHR.slice(-7).map(d=>d.hr).reduce((a,v)=>a+v,0)/7;const dev=last7-avg30;if(dev>5)score-=20;else if(dev>2)score-=10;}
+  return Math.max(0,Math.min(100,Math.round(score)));
+}
+
+function renderCoach(){
+  const pts=getLoadPts(14);
+  if(!pts.length)return;
+  const last=pts[pts.length-1];
+  const prev7=pts[Math.max(0,pts.length-8)];
+  const atlGrowth=prev7.atl>0?Math.round((last.atl-prev7.atl)/prev7.atl*100):0;
+  const phase=coachPhase(last.tsb,last.ctl,atlGrowth);
+  const rsc=recScore(last.tsb,S.restingHR);
+  const rscCol=rsc>=70?'#34d058':rsc>=45?'#f59e0b':'#ef4444';
+  const warnHtml=atlGrowth>15?`<div class="note" style="border-color:#ef4444;margin-bottom:10px">⚠️ ATL stieg letzte Woche um ${atlGrowth}% – Verletzungsrisiko erhöht. Reduziere Umfang oder Intensität.</div>`:'';
+  document.getElementById('coachStatus').innerHTML=`
+    ${warnHtml}
+    <div class="sg" style="margin-bottom:12px">
+      <div class="scard"><div class="scard-v" style="color:${phase.col}">${last.ctl}</div><div class="scard-l">CTL Fitness</div></div>
+      <div class="scard"><div class="scard-v" style="color:#ff9f43">${last.atl}</div><div class="scard-l">ATL Ermüdung</div></div>
+      <div class="scard"><div class="scard-v" style="color:${last.tsb>=0?'#34d058':'#ef4444'}">${last.tsb>=0?'+':''}${last.tsb}</div><div class="scard-l">Form/TSB</div></div>
+      <div class="scard"><div class="scard-v" style="color:${rscCol}">${rsc}%</div><div class="scard-l">Erholung</div></div>
+    </div>
+    <div style="background:${phase.col}18;border:1px solid ${phase.col}40;border-radius:10px;padding:12px 14px;margin-bottom:4px">
+      <div style="font-weight:700;font-size:.9rem;color:${phase.col};margin-bottom:4px">${phase.lbl}</div>
+      <div style="font-size:.8rem;color:#7880a0;line-height:1.5">${phase.desc}</div>
+    </div>`;
+}
+
+function generatePlan(){
+  const pts=getLoadPts(14);const last=pts[pts.length-1];
+  const prev7=pts[Math.max(0,pts.length-8)];
+  const atlGrowth=prev7.atl>0?Math.round((last.atl-prev7.atl)/prev7.atl*100):0;
+  const phase=coachPhase(last.tsb,last.ctl,atlGrowth);
+  const goal=document.getElementById('coachGoal').value;
+  const days=parseInt(document.getElementById('coachDays').value);
+  const dur=parseInt(document.getElementById('coachDur').value);
+  const targetDate=document.getElementById('coachTarget').value;
+  const weekPlan=buildCoachWeek(goal,phase,days,dur);
+  const goalLabels={health:'Gesundheit & Wohlbefinden',endurance:'Grundlagenausdauer',weightloss:'Gewicht reduzieren',race:'Wettkampfvorbereitung'};
+  // Recommended TSS
+  const wTSS=Math.round(last.ctl*7*(phase.id==='danger'||phase.id==='fatigue'?0.5:phase.id==='peak'?0.85:phase.id==='fresh'?1.15:1.0));
+  // Countdown
+  let countdown='';
+  if(targetDate){const dLeft=Math.round((new Date(targetDate)-new Date())/864e5);const weeks=Math.floor(dLeft/7);countdown=`<div class="note" style="margin-bottom:10px">🏁 Zieldatum: <strong>${dLeft} Tage</strong> (${weeks} Wochen) bis zum Event.</div>`;}
+  // Build day cards (starting from next Mon)
+  const today=new Date();const todayDow=today.getDay();const daysToMon=(todayDow===0?1:8-todayDow)%7||7;
+  const nextMon=new Date(today);nextMon.setDate(today.getDate()+daysToMon);
+  const dayCards=weekPlan.map((sid,i)=>{
+    const s=CSESS[sid];const dd=new Date(nextMon);dd.setDate(nextMon.getDate()+i);
+    const dateStr=`${dd.getDate()}. ${MN[dd.getMonth()]}`;
+    return`<div style="background:${s.bg};border:1px solid #252840;border-radius:11px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <span style="font-weight:700;font-size:.82rem">${CDAY[i]} ${dateStr}</span>
+        <span style="font-size:.7rem;color:#7880a0">${s.zone}</span>
+      </div>
+      <div style="font-size:.95rem;margin-bottom:5px">${s.e} <strong>${s.lbl}</strong></div>
+      ${sid!=='rest'?`<div style="font-size:.75rem;color:#7880a0;margin-bottom:5px">⏱ ca. ${sid==='z2xl'?Math.round(dur*1.3):sid==='z2l'?Math.round(dur*1.1):sid==='rec'?45:dur} min</div>`:''}
+      <div style="font-size:.73rem;color:#7880a0;line-height:1.5">${s.desc}</div>
+    </div>`;
+  }).join('');
+  // Nutrition tip
+  const nutrTip=goal==='weightloss'?'🍽 An langen Z2-Tagen nüchtern oder mit minimalem Kohlenhydrat-Frühstück für maximalen Fettverbrauch.':
+    goal==='race'?'🍌 In harten Einheiten ab 45 min Kohlenhydrate zuführen (30–60g/h). Danach Protein-Mahlzeit innerhalb 30 min.':
+    '💧 Mindestens 500ml Wasser pro Trainingsstunde. Bei Hitze + Elektrolyte.';
+  document.getElementById('coachPlan').innerHTML=`
+    ${countdown}
+    <div class="sset" style="margin-bottom:13px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h3 style="margin:0">🗓 Wochenplan – ${goalLabels[goal]||goal}</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="background:#1c2035;border:1px solid #252840;border-radius:20px;padding:3px 10px;font-size:.75rem">Ziel-TSS: <strong>${wTSS}</strong></span>
+          <button class="btn bp bsm" onclick="applyCoachPlan(${JSON.stringify(weekPlan).replace(/"/g,"'")})">✅ In Wochenansicht übernehmen</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">${dayCards}</div>
+    </div>
+    <div class="nutr-card"><h4>💡 Ernährungs-Tipp zur Woche</h4><p style="font-size:.8rem;color:#7880a0;line-height:1.5;margin:0">${nutrTip}</p></div>
+    <div class="nutr-card" style="margin-top:10px">
+      <h4>📖 Warum dieser Plan?</h4>
+      <p style="font-size:.79rem;color:#7880a0;line-height:1.6;margin:0">
+        Dein aktueller Fitnesswert (CTL ${last.ctl}) und deine Form (TSB ${last.tsb>=0?'+':''}${last.tsb}) zeigen: <strong style="color:#e2e4f0">${phase.lbl}</strong>.<br>
+        ${phase.id==='danger'||phase.id==='fatigue'?'Deshalb wurde ein Erholungsplan mit reduzierter Intensität gewählt.':
+        phase.id==='peak'||phase.id==='fresh'?'Du bist gut erholt – der Plan nutzt das für qualitativ hochwertige Einheiten.':
+        'Der Plan folgt dem 80/20-Prinzip: 80% lockere Z2-Einheiten, max. 20% Intensität.'}<br>
+        Qualitäts-Einheiten werden bewusst nicht back-to-back platziert, um ausreichend Erholung sicherzustellen.
+      </p>
+    </div>`;
+}
+
+function applyCoachPlan(planArr){
+  const MAP={rest:'rest',rec:'z2',z2s:'z2',z2l:'z2',z2xl:'z2',tempo:'intervals_z3z4',ss:'intervals_z3z4',iv4:'intervals_z4',iv5:'intervals_z4',racep:'intervals_z4'};
+  planArr.forEach((sid,i)=>{S.plan[i]=MAP[sid]||'rest';});
+  save();renderWeek();tab('week');
 }
 
 // ===== RESTING HR =====
