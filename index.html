@@ -410,7 +410,7 @@ const TT={
 const DN=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const MN=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const BC={b1:'#5c8eff',b2:'#34d058'};
-const APP_VERSION='1.2.1';
+const APP_VERSION='1.2.2';
 
 let S={plan:{0:'rest',1:'rest',2:'z2',3:'z2',4:'intervals_z3z4',5:'intervals_z4',6:'rest'},
   bikes:{b1:'Tracking-Bike',b2:'Gravelbike'},hrMin:80,hrMax:195,sessions:[],deleted:[],updatedAt:'',
@@ -852,7 +852,7 @@ function drawHRCanvas(canvas,hrs,spd,alt,hrMax,ovs,crossFrac){
   if(ovs.spd&&spd.length){const sMax=Math.max(...spd.map(p=>p.s))||1;ctx.strokeStyle='#ff9f43';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();spd.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-p.s/sMax)*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
   if(ovs.alt&&alt.length){const aVals=alt.map(p=>p.e);const aMin=Math.min(...aVals),aMax=Math.max(...aVals)-Math.min(...aVals)||1;ctx.strokeStyle='#54a0ff';ctx.lineWidth=1.5;ctx.globalAlpha=.7;ctx.beginPath();alt.forEach((p,i)=>{const x=toX(p.t),y=pad.t+(1-(p.e-Math.min(...aVals))/aMax)*cH;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.globalAlpha=1;}
   // HR line
-  if(hrs.length){ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();hrs.forEach((p,i)=>{if(!p.h)return;const x=toX(p.t),y=toYhr(p.h);ctx.lineTo(x,y);if(i===0)ctx.moveTo(x,y);});ctx.stroke();}
+  if(hrs.length){ctx.strokeStyle='#e84393';ctx.lineWidth=2;ctx.lineJoin='round';ctx.beginPath();let first=true;hrs.forEach(p=>{if(!p.h||p.h<=0)return;const x=toX(p.t),y=toYhr(p.h);if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);});ctx.stroke();}
   // Axis labels
   ctx.fillStyle='#7880a0';ctx.font='9px sans-serif';ctx.textAlign='right';
   ctx.fillText(Math.round(hrMax2),pad.l-2,pad.t+4);ctx.fillText(Math.round(hrMin2),pad.l-2,pad.t+cH+4);
